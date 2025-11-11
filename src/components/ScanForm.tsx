@@ -63,7 +63,7 @@ export const ScanForm = ({ onScanComplete }: ScanFormProps) => {
         </div>
         <Input
           type="text"
-          placeholder="Enter domain or URL (e.g., example.com or https://example.com)"
+          placeholder="Try: google.com, github.com, cloudflare.com"
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
           className="pl-12 pr-32 h-14 text-lg"

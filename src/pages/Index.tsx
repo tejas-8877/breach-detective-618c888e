@@ -34,8 +34,11 @@ const Index = () => {
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
               Scan Your Website for Vulnerabilities
             </h2>
-            <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+            <p className="text-xl text-muted-foreground mb-4 max-w-2xl mx-auto">
               Get a comprehensive security analysis with actionable recommendations to protect your website
+            </p>
+            <p className="text-sm text-muted-foreground mb-8">
+              💡 Tip: Some sites block scanners. Try well-known domains like google.com or github.com for best results
             </p>
 
             {/* Feature Cards */}

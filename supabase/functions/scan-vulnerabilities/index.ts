@@ -41,12 +41,44 @@ serve(async (req) => {
 
     const vulnerabilities: VulnerabilityCheck[] = [];
 
+    // Helper function to fetch with timeout
+    const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 10000) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        return response;
+      } catch (error) {
+        clearTimeout(timeout);
+        throw error;
+      }
+    };
+
     // Perform vulnerability checks
     try {
-      const response = await fetch(httpsUrl, {
-        method: 'GET',
-        redirect: 'manual',
-      });
+      let response;
+      try {
+        response = await fetchWithTimeout(httpsUrl, {
+          method: 'GET',
+          redirect: 'manual',
+        }, 10000);
+      } catch (fetchError) {
+        // If HTTPS fails, try HTTP
+        console.log('HTTPS fetch failed, trying HTTP:', fetchError);
+        try {
+          response = await fetchWithTimeout(httpUrl, {
+            method: 'GET',
+            redirect: 'manual',
+          }, 10000);
+        } catch (httpError) {
+          throw new Error('Unable to connect to domain. The site may be blocking automated requests or is unreachable. Try popular domains like google.com, github.com, or cloudflare.com');
+        }
+      }
 
       const headers = response.headers;
 
@@ -220,7 +252,7 @@ serve(async (req) => {
 
       // 16. HTTP to HTTPS Redirect
       try {
-        const httpResponse = await fetch(httpUrl, { redirect: 'manual' });
+        const httpResponse = await fetchWithTimeout(httpUrl, { redirect: 'manual' }, 5000);
         const redirectsToHTTPS = httpResponse.status >= 300 && httpResponse.status < 400 && 
           httpResponse.headers.get('location')?.startsWith('https://');
         
@@ -238,7 +270,7 @@ serve(async (req) => {
 
       // 17. robots.txt Check
       try {
-        const robotsResponse = await fetch(`${httpsUrl}/robots.txt`);
+        const robotsResponse = await fetchWithTimeout(`${httpsUrl}/robots.txt`, {}, 5000);
         const robotsText = await robotsResponse.text();
         const hasDisallow = robotsText.includes('Disallow:');
         
@@ -256,7 +288,7 @@ serve(async (req) => {
 
       // 18. security.txt Check
       try {
-        const securityResponse = await fetch(`${httpsUrl}/.well-known/security.txt`);
+        const securityResponse = await fetchWithTimeout(`${httpsUrl}/.well-known/security.txt`, {}, 5000);
         const hasSecurityTxt = securityResponse.ok;
         
         vulnerabilities.push({
