@@ -3,8 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Shield, AlertTriangle, CheckCircle, XCircle, Info } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle, XCircle, Info, Download } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface Vulnerability {
   id: string;
@@ -122,19 +124,166 @@ export const ScanResults = ({ scanId }: ScanResultsProps) => {
     return acc;
   }, {} as Record<string, Vulnerability[]>);
 
+  const downloadReport = () => {
+    const reportContent = generateTextReport();
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `security-scan-${scan.domain}-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Report downloaded successfully');
+  };
+
+  const generateTextReport = () => {
+    const date = new Date(scan.created_at).toLocaleString();
+    let report = `
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    SECURITY VULNERABILITY SCAN REPORT                      ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+Domain: ${scan.domain}
+Scan Date: ${date}
+Security Score: ${scan.security_score}/100
+Total Checks: ${vulnerabilities.length}
+Issues Found: ${foundVulnerabilities.length}
+Passed Checks: ${passedChecks.length}
+
+════════════════════════════════════════════════════════════════════════════
+
+                            EXECUTIVE SUMMARY
+────────────────────────────────────────────────────────────────────────────
+`;
+
+    const criticalCount = foundVulnerabilities.filter(v => v.severity === 'critical').length;
+    const highCount = foundVulnerabilities.filter(v => v.severity === 'high').length;
+    const mediumCount = foundVulnerabilities.filter(v => v.severity === 'medium').length;
+    const lowCount = foundVulnerabilities.filter(v => v.severity === 'low').length;
+
+    report += `
+Critical Vulnerabilities: ${criticalCount}
+High Severity: ${highCount}
+Medium Severity: ${mediumCount}
+Low Severity: ${lowCount}
+
+${scan.security_score >= 80 ? '✓ Good security posture' : scan.security_score >= 60 ? '⚠ Moderate security concerns' : '✗ Significant security issues detected'}
+
+════════════════════════════════════════════════════════════════════════════
+
+                        DETAILED FINDINGS
+════════════════════════════════════════════════════════════════════════════
+`;
+
+    // Add found vulnerabilities
+    if (foundVulnerabilities.length > 0) {
+      report += '\n\n--- VULNERABILITIES DETECTED ---\n\n';
+      foundVulnerabilities.forEach((vuln, index) => {
+        report += `
+${index + 1}. ${vuln.title}
+${'─'.repeat(78)}
+Category: ${vuln.category}
+Severity: ${vuln.severity.toUpperCase()}
+Status: VULNERABLE
+
+Description:
+${vuln.description}
+
+Recommendation:
+${vuln.recommendation}
+
+${vuln.recommendation.includes('How to Fix:') ? '' : 'Please implement the recommended security controls to address this vulnerability.'}
+
+`;
+      });
+    }
+
+    // Add passed checks
+    if (passedChecks.length > 0) {
+      report += '\n\n--- PASSED SECURITY CHECKS ---\n\n';
+      passedChecks.forEach((vuln, index) => {
+        report += `${index + 1}. ${vuln.title} - ${vuln.category}\n`;
+      });
+    }
+
+    report += `
+
+════════════════════════════════════════════════════════════════════════════
+
+                        REMEDIATION PRIORITY
+────────────────────────────────────────────────────────────────────────────
+
+`;
+
+    if (criticalCount > 0) {
+      report += `⚠ CRITICAL: Address ${criticalCount} critical issue(s) immediately\n`;
+    }
+    if (highCount > 0) {
+      report += `⚠ HIGH: Fix ${highCount} high severity issue(s) within 7 days\n`;
+    }
+    if (mediumCount > 0) {
+      report += `⚠ MEDIUM: Resolve ${mediumCount} medium severity issue(s) within 30 days\n`;
+    }
+    if (lowCount > 0) {
+      report += `ℹ LOW: Plan to address ${lowCount} low severity issue(s) in next maintenance cycle\n`;
+    }
+
+    report += `
+════════════════════════════════════════════════════════════════════════════
+
+                    OWASP TOP 10 COVERAGE (2021)
+────────────────────────────────────────────────────────────────────────────
+
+This scan checked for vulnerabilities related to:
+• A01:2021 - Broken Access Control
+• A02:2021 - Cryptographic Failures
+• A03:2021 - Injection
+• A04:2021 - Insecure Design
+• A05:2021 - Security Misconfiguration
+• A07:2021 - Identification and Authentication Failures
+• A08:2021 - Software and Data Integrity Failures
+
+════════════════════════════════════════════════════════════════════════════
+
+                            DISCLAIMER
+────────────────────────────────────────────────────────────────────────────
+
+This automated scan provides a preliminary security assessment. It does not
+replace a comprehensive security audit performed by qualified professionals.
+Manual testing and additional security measures may be required.
+
+For critical applications, please consult with a security expert.
+
+════════════════════════════════════════════════════════════════════════════
+
+                        END OF REPORT
+                        
+`;
+
+    return report;
+  };
+
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6">
       {/* Security Score Card */}
       <Card className="border-2">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <CardTitle className="text-2xl">Security Score</CardTitle>
               <CardDescription className="text-lg mt-1">{scan.domain}</CardDescription>
             </div>
-            <div className={`text-6xl font-bold ${getScoreColor(scan.security_score)}`}>
-              {scan.security_score}
-              <span className="text-2xl text-muted-foreground">/100</span>
+            <div className="flex items-center gap-4">
+              <Button onClick={downloadReport} variant="outline" size="lg" className="gap-2">
+                <Download className="h-5 w-5" />
+                Download Report (TXT)
+              </Button>
+              <div className={`text-6xl font-bold ${getScoreColor(scan.security_score)}`}>
+                {scan.security_score}
+                <span className="text-2xl text-muted-foreground">/100</span>
+              </div>
             </div>
           </div>
         </CardHeader>

@@ -13,6 +13,8 @@ interface VulnerabilityCheck {
   description: string;
   recommendation: string;
   found: boolean;
+  owasp_category?: string;
+  how_to_fix?: string;
 }
 
 serve(async (req) => {
@@ -82,36 +84,42 @@ serve(async (req) => {
 
       const headers = response.headers;
 
-      // 1. SSL/TLS Check
+      // 1. SSL/TLS Check (OWASP A02:2021 - Cryptographic Failures)
       vulnerabilities.push({
         category: 'Transport Security',
         severity: 'critical',
         title: 'SSL/TLS Certificate',
         description: 'Website uses HTTPS encryption',
-        recommendation: 'Ensure SSL certificate is valid and up to date',
-        found: httpsUrl.startsWith('https'),
+        recommendation: 'Ensure SSL certificate is valid and up to date. Use TLS 1.3 or TLS 1.2 at minimum.',
+        found: !httpsUrl.startsWith('https'),
+        owasp_category: 'A02:2021 - Cryptographic Failures',
+        how_to_fix: 'Install a valid SSL/TLS certificate from a trusted Certificate Authority. Configure your web server (Apache, Nginx, IIS) to use HTTPS. Redirect all HTTP traffic to HTTPS. Use tools like Let\'s Encrypt for free certificates.',
       });
 
-      // 2. HSTS Header
+      // 2. HSTS Header (OWASP A05:2021 - Security Misconfiguration)
       const hasHSTS = headers.has('strict-transport-security');
       vulnerabilities.push({
         category: 'Transport Security',
         severity: 'high',
         title: 'HTTP Strict Transport Security (HSTS)',
-        description: hasHSTS ? 'HSTS header is present' : 'Missing HSTS header',
-        recommendation: 'Enable HSTS to force HTTPS connections: Strict-Transport-Security: max-age=31536000; includeSubDomains',
+        description: hasHSTS ? 'HSTS header is present' : 'Missing HSTS header - allows downgrade attacks',
+        recommendation: 'Enable HSTS to force HTTPS connections: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload',
         found: !hasHSTS,
+        owasp_category: 'A05:2021 - Security Misconfiguration',
+        how_to_fix: 'Add the HSTS header to your web server configuration. For Nginx: add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always; For Apache: Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"',
       });
 
-      // 3. X-Frame-Options
+      // 3. X-Frame-Options (OWASP A04:2021 - Insecure Design / Clickjacking)
       const hasXFrame = headers.has('x-frame-options');
       vulnerabilities.push({
         category: 'Clickjacking Protection',
         severity: 'medium',
         title: 'X-Frame-Options Header',
-        description: hasXFrame ? 'Clickjacking protection enabled' : 'Missing X-Frame-Options header',
-        recommendation: 'Add X-Frame-Options: DENY or SAMEORIGIN to prevent clickjacking',
+        description: hasXFrame ? 'Clickjacking protection enabled' : 'Missing X-Frame-Options header - vulnerable to clickjacking attacks',
+        recommendation: 'Add X-Frame-Options: DENY or SAMEORIGIN to prevent clickjacking attacks',
         found: !hasXFrame,
+        owasp_category: 'A04:2021 - Insecure Design',
+        how_to_fix: 'Add X-Frame-Options header in your web server. For Nginx: add_header X-Frame-Options "SAMEORIGIN" always; For Apache: Header always set X-Frame-Options "SAMEORIGIN". Use DENY if you never need your site in frames, or SAMEORIGIN if only your own site should frame it.',
       });
 
       // 4. X-Content-Type-Options
@@ -136,15 +144,17 @@ serve(async (req) => {
         found: !hasXSS,
       });
 
-      // 6. Content-Security-Policy
+      // 6. Content-Security-Policy (OWASP A03:2021 - Injection / XSS Prevention)
       const hasCSP = headers.has('content-security-policy');
       vulnerabilities.push({
         category: 'Content Security',
         severity: 'high',
         title: 'Content Security Policy (CSP)',
-        description: hasCSP ? 'CSP header is configured' : 'Missing Content-Security-Policy header',
-        recommendation: 'Implement a strict CSP to prevent XSS and data injection attacks',
+        description: hasCSP ? 'CSP header is configured' : 'Missing Content-Security-Policy header - vulnerable to XSS attacks',
+        recommendation: 'Implement a strict CSP to prevent XSS and data injection attacks. Start with: Content-Security-Policy: default-src \'self\'',
         found: !hasCSP,
+        owasp_category: 'A03:2021 - Injection',
+        how_to_fix: 'Add CSP header to restrict resource loading. Start restrictive: Content-Security-Policy: default-src \'self\'; script-src \'self\'; style-src \'self\'; img-src \'self\' data: https:; Then gradually add trusted sources as needed. Test in report-only mode first.',
       });
 
       // 7. Referrer-Policy
@@ -203,16 +213,18 @@ serve(async (req) => {
         found: !hasCacheControl,
       });
 
-      // 12. CORS Configuration
+      // 12. CORS Configuration (OWASP A01:2021 - Broken Access Control)
       const corsHeader = headers.get('access-control-allow-origin');
       const hasWildcardCORS = corsHeader === '*';
       vulnerabilities.push({
         category: 'CORS Security',
-        severity: hasWildcardCORS ? 'medium' : 'info',
+        severity: hasWildcardCORS ? 'high' : 'info',
         title: 'CORS Configuration',
-        description: hasWildcardCORS ? 'Wildcard CORS policy detected (*)' : 'CORS policy is restrictive or not set',
-        recommendation: 'Avoid using wildcard (*) in Access-Control-Allow-Origin for sensitive resources',
+        description: hasWildcardCORS ? 'Wildcard CORS policy detected (*) - allows any origin to access resources' : 'CORS policy is restrictive or not set',
+        recommendation: 'Avoid using wildcard (*) in Access-Control-Allow-Origin. Specify exact trusted origins.',
         found: hasWildcardCORS,
+        owasp_category: 'A01:2021 - Broken Access Control',
+        how_to_fix: 'Replace Access-Control-Allow-Origin: * with specific origins. In your backend, validate the Origin header and return only trusted domains. Example: if (trustedOrigins.includes(origin)) { res.setHeader(\'Access-Control-Allow-Origin\', origin); }',
       });
 
       // 13-15. Cookie Security Checks
@@ -226,27 +238,33 @@ serve(async (req) => {
           category: 'Cookie Security',
           severity: 'high',
           title: 'Secure Cookie Flag',
-          description: hasSecureCookies ? 'Cookies have Secure flag' : 'Cookies missing Secure flag',
+          description: hasSecureCookies ? 'Cookies have Secure flag' : 'Cookies missing Secure flag - can be intercepted over HTTP',
           recommendation: 'Add Secure flag to all cookies to ensure they are only sent over HTTPS',
           found: !hasSecureCookies,
+          owasp_category: 'A07:2021 - Identification and Authentication Failures',
+          how_to_fix: 'Set Secure flag on all cookies. In your backend: Set-Cookie: sessionId=abc123; Secure; HttpOnly; SameSite=Strict. Most frameworks support this: Express.js: res.cookie(\'name\', \'value\', { secure: true })',
         });
 
         vulnerabilities.push({
           category: 'Cookie Security',
           severity: 'high',
           title: 'HttpOnly Cookie Flag',
-          description: hasHttpOnly ? 'Cookies have HttpOnly flag' : 'Cookies missing HttpOnly flag',
-          recommendation: 'Add HttpOnly flag to prevent JavaScript access to sensitive cookies',
+          description: hasHttpOnly ? 'Cookies have HttpOnly flag' : 'Cookies missing HttpOnly flag - vulnerable to XSS attacks',
+          recommendation: 'Add HttpOnly flag to prevent JavaScript access to sensitive cookies, protecting against XSS',
           found: !hasHttpOnly,
+          owasp_category: 'A07:2021 - Identification and Authentication Failures',
+          how_to_fix: 'Enable HttpOnly flag on session cookies: Set-Cookie: sessionId=abc123; HttpOnly; Secure; SameSite=Strict. This prevents client-side JavaScript from accessing the cookie, mitigating XSS cookie theft.',
         });
 
         vulnerabilities.push({
           category: 'Cookie Security',
           severity: 'medium',
           title: 'SameSite Cookie Attribute',
-          description: hasSameSite ? 'Cookies have SameSite attribute' : 'Cookies missing SameSite attribute',
-          recommendation: 'Add SameSite attribute to cookies to prevent CSRF attacks',
+          description: hasSameSite ? 'Cookies have SameSite attribute' : 'Cookies missing SameSite attribute - vulnerable to CSRF',
+          recommendation: 'Add SameSite attribute to cookies to prevent CSRF attacks. Use SameSite=Strict or SameSite=Lax',
           found: !hasSameSite,
+          owasp_category: 'A01:2021 - Broken Access Control',
+          how_to_fix: 'Add SameSite attribute: Set-Cookie: sessionId=abc123; SameSite=Strict; Secure; HttpOnly. Use Strict for maximum protection, or Lax if you need some cross-site functionality. Never use None without Secure flag.',
         });
       }
 
@@ -303,16 +321,18 @@ serve(async (req) => {
         console.log('security.txt check failed:', e);
       }
 
-      // 19. Mixed Content Check
+      // 19. Mixed Content Check (OWASP A02:2021 - Cryptographic Failures)
       const bodyText = await response.text();
       const hasMixedContent = bodyText.includes('http://') && httpsUrl.startsWith('https://');
       vulnerabilities.push({
         category: 'Mixed Content',
         severity: hasMixedContent ? 'high' : 'info',
         title: 'Mixed Content Resources',
-        description: hasMixedContent ? 'HTTP resources found on HTTPS page' : 'No obvious mixed content detected',
-        recommendation: 'Ensure all resources are loaded over HTTPS',
+        description: hasMixedContent ? 'HTTP resources found on HTTPS page - breaks encryption' : 'No obvious mixed content detected',
+        recommendation: 'Ensure all resources (images, scripts, CSS) are loaded over HTTPS to maintain encryption',
         found: hasMixedContent,
+        owasp_category: 'A02:2021 - Cryptographic Failures',
+        how_to_fix: 'Change all http:// URLs to https:// or protocol-relative URLs (//). Search your code for src="http:// and href="http://. Update CDN links, external resources, and API endpoints to use HTTPS. Enable "Upgrade Insecure Requests" CSP directive.',
       });
 
       // 20. Directory Listing Check
@@ -424,14 +444,14 @@ serve(async (req) => {
       throw scanError;
     }
 
-    // Save vulnerabilities
+    // Save vulnerabilities (store additional OWASP data in description/recommendation if needed)
     const vulnerabilityRecords = vulnerabilities.map(v => ({
       scan_id: scanData.id,
-      category: v.category,
+      category: v.owasp_category || v.category,
       severity: v.severity,
       title: v.title,
       description: v.description,
-      recommendation: v.recommendation,
+      recommendation: v.found && v.how_to_fix ? `${v.recommendation}\n\nHow to Fix: ${v.how_to_fix}` : v.recommendation,
       found: v.found,
     }));
 
