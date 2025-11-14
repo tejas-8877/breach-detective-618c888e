@@ -140,129 +140,246 @@ export const ScanResults = ({ scanId }: ScanResultsProps) => {
 
   const generateTextReport = () => {
     const date = new Date(scan.created_at).toLocaleString();
-    let report = `
-╔════════════════════════════════════════════════════════════════════════════╗
-║                    SECURITY VULNERABILITY SCAN REPORT                      ║
-╚════════════════════════════════════════════════════════════════════════════╝
-
-Domain: ${scan.domain}
-Scan Date: ${date}
-Security Score: ${scan.security_score}/100
-Total Checks: ${vulnerabilities.length}
-Issues Found: ${foundVulnerabilities.length}
-Passed Checks: ${passedChecks.length}
-
-════════════════════════════════════════════════════════════════════════════
-
-                            EXECUTIVE SUMMARY
-────────────────────────────────────────────────────────────────────────────
-`;
-
     const criticalCount = foundVulnerabilities.filter(v => v.severity === 'critical').length;
     const highCount = foundVulnerabilities.filter(v => v.severity === 'high').length;
     const mediumCount = foundVulnerabilities.filter(v => v.severity === 'medium').length;
     const lowCount = foundVulnerabilities.filter(v => v.severity === 'low').length;
+    const infoCount = foundVulnerabilities.filter(v => v.severity === 'info').length;
 
-    report += `
-Critical Vulnerabilities: ${criticalCount}
-High Severity: ${highCount}
-Medium Severity: ${mediumCount}
-Low Severity: ${lowCount}
+    // Group vulnerabilities by OWASP category
+    const owaspGroups = foundVulnerabilities.reduce((acc, vuln) => {
+      const category = vuln.category;
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(vuln);
+      return acc;
+    }, {} as Record<string, Vulnerability[]>);
 
-${scan.security_score >= 80 ? '✓ Good security posture' : scan.security_score >= 60 ? '⚠ Moderate security concerns' : '✗ Significant security issues detected'}
+    let report = `
+${'='.repeat(80)}
+           COMPREHENSIVE SECURITY VULNERABILITY SCAN REPORT
+${'='.repeat(80)}
 
-════════════════════════════════════════════════════════════════════════════
+Domain: ${scan.domain}
+Scan Date: ${date}
+Scan ID: ${scan.id}
+Report Generated: ${new Date().toISOString()}
 
-                        DETAILED FINDINGS
-════════════════════════════════════════════════════════════════════════════
-`;
+${'='.repeat(80)}
+                          EXECUTIVE SUMMARY
+${'='.repeat(80)}
 
-    // Add found vulnerabilities
-    if (foundVulnerabilities.length > 0) {
-      report += '\n\n--- VULNERABILITIES DETECTED ---\n\n';
-      foundVulnerabilities.forEach((vuln, index) => {
-        report += `
-${index + 1}. ${vuln.title}
-${'─'.repeat(78)}
-Category: ${vuln.category}
-Severity: ${vuln.severity.toUpperCase()}
-Status: VULNERABLE
+Security Score: ${scan.security_score}/100
 
-Description:
+Risk Assessment: ${
+  scan.security_score >= 80 ? 'LOW RISK - Good security posture' :
+  scan.security_score >= 60 ? 'MODERATE RISK - Some vulnerabilities need attention' :
+  scan.security_score >= 40 ? 'HIGH RISK - Multiple security issues detected' :
+  'CRITICAL RISK - Immediate action required'
+}
+
+Total Checks Performed: ${vulnerabilities.length}
+Vulnerabilities Found: ${foundVulnerabilities.length}
+Passed Checks: ${passedChecks.length}
+
+Severity Breakdown:
+  🔴 Critical: ${criticalCount} (Immediate action required)
+  🟠 High: ${highCount} (Address within 24-48 hours)
+  🟡 Medium: ${mediumCount} (Plan for next update)
+  🔵 Low: ${lowCount} (Address in routine maintenance)
+  ⚪ Info: ${infoCount} (Informational findings)
+
+${'='.repeat(80)}
+                    DETAILED VULNERABILITY FINDINGS
+${'='.repeat(80)}
+
+${foundVulnerabilities.length > 0 ? foundVulnerabilities.map((vuln, index) => `
+${'─'.repeat(80)}
+[${index + 1}] ${vuln.title}
+${'─'.repeat(80)}
+
+⚠️  Severity: ${vuln.severity.toUpperCase()}
+📁 Category: ${vuln.category}
+
+📋 Description:
 ${vuln.description}
 
-Recommendation:
-${vuln.recommendation}
+💡 Recommendation:
+${vuln.recommendation.includes('How to Fix:') 
+  ? vuln.recommendation.split('How to Fix:')[0].trim()
+  : vuln.recommendation}
 
-${vuln.recommendation.includes('How to Fix:') ? '' : 'Please implement the recommended security controls to address this vulnerability.'}
+${vuln.recommendation.includes('How to Fix:') ? `
+🔧 How to Fix:
+${vuln.recommendation.split('How to Fix:')[1].trim()}
+` : ''}
+${'─'.repeat(80)}
+`).join('\n') : 'No vulnerabilities detected!'}
 
-`;
-      });
-    }
+${'='.repeat(80)}
+                    VULNERABILITIES BY CATEGORY
+${'='.repeat(80)}
 
-    // Add passed checks
-    if (passedChecks.length > 0) {
-      report += '\n\n--- PASSED SECURITY CHECKS ---\n\n';
-      passedChecks.forEach((vuln, index) => {
-        report += `${index + 1}. ${vuln.title} - ${vuln.category}\n`;
-      });
-    }
+${Object.entries(owaspGroups).map(([category, vulns]) => `
+${category}:
+${vulns.map((v, i) => `  ${i + 1}. [${v.severity.toUpperCase()}] ${v.title}`).join('\n')}
+`).join('\n')}
 
-    report += `
+${'='.repeat(80)}
+                  PASSED SECURITY CHECKS (${passedChecks.length})
+${'='.repeat(80)}
 
-════════════════════════════════════════════════════════════════════════════
+${passedChecks.map((vuln, index) => `✓ ${index + 1}. ${vuln.title} - ${vuln.category}`).join('\n')}
 
-                        REMEDIATION PRIORITY
-────────────────────────────────────────────────────────────────────────────
+${'='.repeat(80)}
+                        REMEDIATION ROADMAP
+${'='.repeat(80)}
 
-`;
+PHASE 1 - IMMEDIATE (Critical & High Severity):
+${foundVulnerabilities.filter(v => v.severity === 'critical' || v.severity === 'high').map((v, i) => {
+  const recommendation = v.recommendation.includes('How to Fix:') 
+    ? v.recommendation.split('How to Fix:')[0].trim()
+    : v.recommendation;
+  return `  ${i + 1}. ${v.title}\n     Action: ${recommendation.split('.')[0]}.`;
+}).join('\n') || '  ✓ No immediate action items'}
 
-    if (criticalCount > 0) {
-      report += `⚠ CRITICAL: Address ${criticalCount} critical issue(s) immediately\n`;
-    }
-    if (highCount > 0) {
-      report += `⚠ HIGH: Fix ${highCount} high severity issue(s) within 7 days\n`;
-    }
-    if (mediumCount > 0) {
-      report += `⚠ MEDIUM: Resolve ${mediumCount} medium severity issue(s) within 30 days\n`;
-    }
-    if (lowCount > 0) {
-      report += `ℹ LOW: Plan to address ${lowCount} low severity issue(s) in next maintenance cycle\n`;
-    }
+PHASE 2 - SHORT TERM (Medium Severity):
+${foundVulnerabilities.filter(v => v.severity === 'medium').map((v, i) => {
+  const recommendation = v.recommendation.includes('How to Fix:') 
+    ? v.recommendation.split('How to Fix:')[0].trim()
+    : v.recommendation;
+  return `  ${i + 1}. ${v.title}\n     Action: ${recommendation.split('.')[0]}.`;
+}).join('\n') || '  ✓ No short-term action items'}
 
-    report += `
-════════════════════════════════════════════════════════════════════════════
+PHASE 3 - LONG TERM (Low Severity):
+${foundVulnerabilities.filter(v => v.severity === 'low').map((v, i) => {
+  const recommendation = v.recommendation.includes('How to Fix:') 
+    ? v.recommendation.split('How to Fix:')[0].trim()
+    : v.recommendation;
+  return `  ${i + 1}. ${v.title}\n     Action: ${recommendation.split('.')[0]}.`;
+}).join('\n') || '  ✓ No long-term action items'}
 
-                    OWASP TOP 10 COVERAGE (2021)
-────────────────────────────────────────────────────────────────────────────
+${'='.repeat(80)}
+                      OWASP TOP 10 2021 COVERAGE
+${'='.repeat(80)}
 
-This scan checked for vulnerabilities related to:
-• A01:2021 - Broken Access Control
-• A02:2021 - Cryptographic Failures
-• A03:2021 - Injection
-• A04:2021 - Insecure Design
-• A05:2021 - Security Misconfiguration
-• A07:2021 - Identification and Authentication Failures
-• A08:2021 - Software and Data Integrity Failures
+This comprehensive scan covers the following OWASP Top 10 categories:
 
-════════════════════════════════════════════════════════════════════════════
+✓ A01:2021 - Broken Access Control
+  - CORS Configuration
+  - Directory Enumeration & Access Control
+  
+✓ A02:2021 - Cryptographic Failures
+  - SSL/TLS Configuration
+  - Mixed Content Detection
+  
+✓ A03:2021 - Injection
+  - SQL Injection Testing
+  - XSS Vulnerability Detection  
+  - XXE (XML External Entity) Detection
+  
+✓ A04:2021 - Insecure Design
+  - X-Frame-Options (Clickjacking Protection)
+  
+✓ A05:2021 - Security Misconfiguration
+  - Security Headers Analysis
+  - Server Information Disclosure
+  
+✓ A06:2021 - Vulnerable and Outdated Components
+  - Framework and Library Detection
+  
+✓ A07:2021 - Identification and Authentication Failures
+  - Cookie Security Analysis
+  
+✓ A08:2021 - Software and Data Integrity Failures
+  - Subresource Integrity
+  - Deserialization Vulnerability Checks
+  
+✓ A09:2021 - Security Logging and Monitoring Failures
+  - Logging and Monitoring Assessment
+  
+✓ A10:2021 - Server-Side Request Forgery (SSRF)
+  - SSRF Protection Assessment
 
+${'='.repeat(80)}
+                          COMPLIANCE NOTES
+${'='.repeat(80)}
+
+- Ensure findings are addressed according to your organization's security policy
+- Document all remediation efforts for audit purposes
+- Schedule regular security scans (recommended: monthly or after major updates)
+- Consider professional penetration testing for critical applications
+- Review and update security policies based on findings
+- Maintain an inventory of all identified vulnerabilities
+- Track remediation progress and validate fixes with re-scans
+
+${'='.repeat(80)}
+                            NEXT STEPS
+${'='.repeat(80)}
+
+1. Review all CRITICAL and HIGH severity findings immediately
+2. Create tickets/tasks for each vulnerability in your tracking system
+3. Assign remediation to appropriate team members
+4. Set deadlines based on severity levels:
+   - Critical: 24 hours
+   - High: 48-72 hours
+   - Medium: 1-2 weeks
+   - Low: Next sprint/release cycle
+5. Implement fixes following the "How to Fix" guidance
+6. Re-scan after implementing fixes to verify remediation
+7. Document lessons learned and update security practices
+8. Schedule regular scans to maintain security posture
+
+${'='.repeat(80)}
+                     SECURITY BEST PRACTICES
+${'='.repeat(80)}
+
+General Recommendations:
+- Implement a Security Development Lifecycle (SDL)
+- Conduct regular security training for development teams
+- Use automated security scanning in CI/CD pipelines
+- Maintain up-to-date dependency management
+- Implement Web Application Firewall (WAF)
+- Enable DDoS protection services
+- Use Content Delivery Network (CDN) with security features
+- Implement rate limiting and request throttling
+- Regular security audits and penetration testing
+- Incident response plan and security monitoring
+
+${'='.repeat(80)}
                             DISCLAIMER
-────────────────────────────────────────────────────────────────────────────
+${'='.repeat(80)}
 
-This automated scan provides a preliminary security assessment. It does not
-replace a comprehensive security audit performed by qualified professionals.
-Manual testing and additional security measures may be required.
+This automated scan provides a baseline security assessment. It does NOT replace:
 
-For critical applications, please consult with a security expert.
+- Manual penetration testing by certified professionals
+- Source code security reviews
+- Architecture security analysis
+- Business logic vulnerability assessment
+- Social engineering and phishing assessments
+- Physical security evaluation
+- Third-party security audits
 
-════════════════════════════════════════════════════════════════════════════
+Limitations:
+- Tests performed are from external perspective only
+- Some vulnerabilities require authenticated access to detect
+- Custom application logic vulnerabilities may not be detected
+- Zero-day vulnerabilities are not included
+- Results may contain false positives requiring manual verification
 
-                        END OF REPORT
-                        
+For comprehensive security assurance, engage qualified security professionals
+for in-depth testing, code review, and assessment tailored to your application.
+
+${'='.repeat(80)}
+                          END OF REPORT
+${'='.repeat(80)}
+
+Generated by: Advanced Web Security Vulnerability Scanner
+Report Version: 2.0
+Scan Engine: OWASP Top 10 Compliance Scanner
+Contact: For questions about this report, consult your security team
 `;
 
-    return report;
+    return report.trim();
   };
 
   return (

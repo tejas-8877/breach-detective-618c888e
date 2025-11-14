@@ -404,6 +404,169 @@ serve(async (req) => {
         found: !hasSRI,
       });
 
+      // 26. SQL Injection Testing (OWASP A03:2021 - Injection)
+      const sqlPayloads = ["'", "1' OR '1'='1", "' OR 1=1--", "' UNION SELECT NULL--"];
+      let sqlInjectionVulnerable = false;
+      
+      try {
+        for (const payload of sqlPayloads) {
+          const testUrl = `${httpsUrl}/?id=${encodeURIComponent(payload)}`;
+          const sqlTestResponse = await fetchWithTimeout(testUrl, {}, 5000);
+          const sqlTestText = await sqlTestResponse.text();
+          
+          // Check for SQL error messages
+          if (sqlTestText.match(/SQL syntax|mysql_|mysqli_|SQLite|PostgreSQL|ORA-\d+|SQL Server|syntax error/i)) {
+            sqlInjectionVulnerable = true;
+            break;
+          }
+        }
+      } catch (e) {
+        console.log('SQL injection test failed:', e);
+      }
+
+      vulnerabilities.push({
+        category: 'SQL Injection',
+        severity: sqlInjectionVulnerable ? 'critical' : 'info',
+        title: 'SQL Injection Vulnerability',
+        description: sqlInjectionVulnerable ? 'Potential SQL injection vulnerability detected - SQL errors exposed' : 'No obvious SQL injection vulnerabilities detected',
+        recommendation: 'Use parameterized queries, prepared statements, and input validation. Never concatenate user input into SQL queries.',
+        found: sqlInjectionVulnerable,
+        owasp_category: 'A03:2021 - Injection',
+        how_to_fix: 'Always use parameterized queries or prepared statements. Example: Instead of "SELECT * FROM users WHERE id=" + userId, use prepared statements with placeholders. Implement input validation and sanitization. Use ORM frameworks that handle parameterization automatically. Enable least-privilege database access.',
+      });
+
+      // 27. XSS Vulnerability Testing (OWASP A03:2021 - Injection)
+      const xssPayloads = ['<script>alert(1)</script>', '<img src=x onerror=alert(1)>', '"><script>alert(1)</script>'];
+      let xssVulnerable = false;
+      
+      try {
+        for (const payload of xssPayloads) {
+          const testUrl = `${httpsUrl}/?q=${encodeURIComponent(payload)}`;
+          const xssTestResponse = await fetchWithTimeout(testUrl, {}, 5000);
+          const xssTestText = await xssTestResponse.text();
+          
+          // Check if payload is reflected unescaped
+          if (xssTestText.includes(payload)) {
+            xssVulnerable = true;
+            break;
+          }
+        }
+      } catch (e) {
+        console.log('XSS test failed:', e);
+      }
+
+      vulnerabilities.push({
+        category: 'Cross-Site Scripting (XSS)',
+        severity: xssVulnerable ? 'high' : 'info',
+        title: 'XSS Vulnerability',
+        description: xssVulnerable ? 'Potential XSS vulnerability detected - unescaped user input reflected' : 'No obvious XSS vulnerabilities detected',
+        recommendation: 'Sanitize and encode all user inputs. Use Content Security Policy. Implement proper output encoding.',
+        found: xssVulnerable,
+        owasp_category: 'A03:2021 - Injection',
+        how_to_fix: 'Implement context-aware output encoding for all user inputs. Use framework-provided escaping functions (e.g., textContent instead of innerHTML). Implement strict CSP headers. Validate input on both client and server side. Use HTTPOnly cookies. Consider using DOMPurify or similar sanitization libraries.',
+      });
+
+      // 28. Directory Enumeration
+      const commonPaths = [
+        '/admin', '/administrator', '/wp-admin', '/phpmyadmin', 
+        '/.git', '/.env', '/backup', '/config', '/test', 
+        '/api/docs', '/swagger', '/graphql', '/.well-known',
+        '/debug', '/console', '/dashboard', '/panel'
+      ];
+      
+      const exposedPaths: string[] = [];
+      
+      try {
+        for (const path of commonPaths) {
+          const pathResponse = await fetchWithTimeout(`${httpsUrl}${path}`, {}, 3000);
+          if (pathResponse.status === 200 || pathResponse.status === 403) {
+            exposedPaths.push(path);
+          }
+        }
+      } catch (e) {
+        console.log('Directory enumeration failed:', e);
+      }
+
+      vulnerabilities.push({
+        category: 'Information Disclosure',
+        severity: exposedPaths.length > 0 ? 'medium' : 'info',
+        title: 'Exposed Directories/Endpoints',
+        description: exposedPaths.length > 0 ? `Found ${exposedPaths.length} potentially sensitive paths: ${exposedPaths.join(', ')}` : 'No sensitive directories detected',
+        recommendation: 'Restrict access to admin panels, configuration files, and development endpoints. Use .htaccess or server config to block access.',
+        found: exposedPaths.length > 0,
+        owasp_category: 'A01:2021 - Broken Access Control',
+        how_to_fix: 'Remove or restrict access to sensitive directories. Use authentication for admin panels. Remove .git, .env, and backup files from production. Configure web server to deny access to hidden files and directories. Implement proper access controls. Use robots.txt to prevent indexing of sensitive areas.',
+      });
+
+      // 29. XML External Entity (XXE) Detection
+      const hasXmlEndpoint = bodyText.match(/content-type.*xml|xml.*endpoint|soap|wsdl/i);
+      vulnerabilities.push({
+        category: 'XML Security',
+        severity: hasXmlEndpoint ? 'medium' : 'info',
+        title: 'XML External Entity (XXE)',
+        description: hasXmlEndpoint ? 'XML endpoints detected - potential XXE risk if not properly configured' : 'No XML endpoints detected',
+        recommendation: 'Disable XML external entity processing in all XML parsers. Use less complex data formats like JSON where possible.',
+        found: !!hasXmlEndpoint,
+        owasp_category: 'A03:2021 - Injection',
+        how_to_fix: 'Disable DTDs and external entities in XML parsers. For Java: factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true). For PHP: libxml_disable_entity_loader(true). Use simple data formats like JSON instead of XML. Validate and sanitize all XML input.',
+      });
+
+      // 30. Insecure Deserialization Check
+      const hasSerializationHeaders = headers.get('content-type')?.includes('java-serialization') || 
+                                     bodyText.match(/pickle|serialize|unserialize|ObjectInputStream/i);
+      vulnerabilities.push({
+        category: 'Deserialization',
+        severity: hasSerializationHeaders ? 'high' : 'info',
+        title: 'Insecure Deserialization',
+        description: hasSerializationHeaders ? 'Potential deserialization detected - may allow remote code execution' : 'No obvious deserialization vulnerabilities',
+        recommendation: 'Avoid deserializing untrusted data. Use secure serialization formats. Implement integrity checks.',
+        found: !!hasSerializationHeaders,
+        owasp_category: 'A08:2021 - Software and Data Integrity Failures',
+        how_to_fix: 'Avoid deserialization of untrusted data entirely. If required, use safe formats like JSON. Implement integrity checks (HMAC) on serialized data. Run deserialization code in sandboxed/restricted environments. Monitor deserialization exceptions. Use allowlists for deserializable classes.',
+      });
+
+      // 31. Insufficient Logging & Monitoring
+      vulnerabilities.push({
+        category: 'Security Monitoring',
+        severity: 'low',
+        title: 'Logging & Monitoring',
+        description: 'Cannot verify logging implementation from external scan',
+        recommendation: 'Implement comprehensive logging for authentication, access control, input validation failures, and security events.',
+        found: false,
+        owasp_category: 'A09:2021 - Security Logging and Monitoring Failures',
+        how_to_fix: 'Implement centralized logging (e.g., ELK stack, Splunk). Log all authentication attempts, access control failures, input validation failures. Set up real-time alerts for suspicious activities. Ensure logs are tamper-proof and backed up. Regularly review and analyze logs. Implement SIEM for security event monitoring.',
+      });
+
+      // 32. Software Composition Analysis
+      const detectedFrameworks = [];
+      if (bodyText.match(/react|_react/i)) detectedFrameworks.push('React');
+      if (bodyText.match(/angular|ng-/i)) detectedFrameworks.push('Angular');
+      if (bodyText.match(/vue|__vue/i)) detectedFrameworks.push('Vue');
+      if (headers.get('x-powered-by')?.includes('Express')) detectedFrameworks.push('Express');
+      
+      vulnerabilities.push({
+        category: 'Software Components',
+        severity: detectedFrameworks.length > 0 ? 'medium' : 'info',
+        title: 'Vulnerable Components',
+        description: detectedFrameworks.length > 0 ? `Detected frameworks: ${detectedFrameworks.join(', ')}. Ensure they are up-to-date.` : 'Unable to detect specific frameworks',
+        recommendation: 'Keep all frameworks, libraries, and dependencies up-to-date. Use automated tools like Snyk or Dependabot.',
+        found: detectedFrameworks.length > 0,
+        owasp_category: 'A06:2021 - Vulnerable and Outdated Components',
+        how_to_fix: 'Regularly update all dependencies. Use npm audit, yarn audit, or Snyk to detect vulnerabilities. Implement automated dependency updates with Dependabot or Renovate. Remove unused dependencies. Subscribe to security advisories for your tech stack. Use Software Composition Analysis (SCA) tools in your CI/CD pipeline.',
+      });
+
+      // 33. Server-Side Request Forgery (SSRF)
+      vulnerabilities.push({
+        category: 'SSRF Protection',
+        severity: 'info',
+        title: 'Server-Side Request Forgery (SSRF)',
+        description: 'SSRF cannot be detected from external scans - requires code review',
+        recommendation: 'Validate and sanitize all URLs. Use allowlists for external requests. Disable unnecessary protocols.',
+        found: false,
+        owasp_category: 'A10:2021 - Server-Side Request Forgery',
+        how_to_fix: 'Implement URL validation and sanitization. Use allowlists for allowed domains/IPs. Disable unused URL schemes (file://, gopher://, etc.). Validate and sanitize user input used in URLs. Use network segmentation. Implement proper firewall rules. Avoid exposing internal services to user-controlled input.',
+      });
+
     } catch (error) {
       console.error('Scan error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -419,9 +582,9 @@ serve(async (req) => {
     
     // Scoring algorithm: Start with 100, deduct points based on severity
     let securityScore = 100;
-    securityScore -= criticalCount * 20;
-    securityScore -= highCount * 10;
-    securityScore -= mediumCount * 5;
+    securityScore -= criticalCount * 25; // Increased penalty for critical (SQL injection, etc.)
+    securityScore -= highCount * 12;
+    securityScore -= mediumCount * 6;
     securityScore -= vulnerabilities.filter(v => v.found && v.severity === 'low').length * 2;
     securityScore = Math.max(0, securityScore); // Don't go below 0
 
