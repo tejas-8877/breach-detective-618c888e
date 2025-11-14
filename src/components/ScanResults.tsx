@@ -7,6 +7,9 @@ import { Shield, AlertTriangle, CheckCircle, XCircle, Info, Download } from "luc
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { AttackGraphVisualization } from "./AttackGraphVisualization";
+import { OSINTFindings } from "./OSINTFindings";
+import { EndpointsList } from "./EndpointsList";
 
 interface Vulnerability {
   id: string;
@@ -549,6 +552,13 @@ Contact: For questions about this report, consult your security team
           ))}
         </TabsContent>
       </Tabs>
+
+      {/* Advanced Security Features */}
+      <div className="space-y-6 mt-6">
+        <AttackGraphVisualization scanId={scanId} />
+        <OSINTFindings scanId={scanId} />
+        <EndpointsList scanId={scanId} />
+      </div>
     </div>
   );
 };

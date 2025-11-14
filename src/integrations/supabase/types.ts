@@ -14,6 +14,129 @@ export type Database = {
   }
   public: {
     Tables: {
+      attack_paths: {
+        Row: {
+          attack_steps: Json
+          created_at: string
+          exploitability: string
+          id: string
+          impact_score: number
+          scan_id: string
+          vulnerability_ids: string[]
+        }
+        Insert: {
+          attack_steps: Json
+          created_at?: string
+          exploitability: string
+          id?: string
+          impact_score?: number
+          scan_id: string
+          vulnerability_ids: string[]
+        }
+        Update: {
+          attack_steps?: Json
+          created_at?: string
+          exploitability?: string
+          id?: string
+          impact_score?: number
+          scan_id?: string
+          vulnerability_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attack_paths_scan_id_fkey"
+            columns: ["scan_id"]
+            isOneToOne: false
+            referencedRelation: "scans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      endpoints: {
+        Row: {
+          content_type: string | null
+          created_at: string
+          discovered_by: string
+          id: string
+          method: string
+          path: string
+          response_time: number | null
+          scan_id: string
+          status_code: number | null
+        }
+        Insert: {
+          content_type?: string | null
+          created_at?: string
+          discovered_by: string
+          id?: string
+          method?: string
+          path: string
+          response_time?: number | null
+          scan_id: string
+          status_code?: number | null
+        }
+        Update: {
+          content_type?: string | null
+          created_at?: string
+          discovered_by?: string
+          id?: string
+          method?: string
+          path?: string
+          response_time?: number | null
+          scan_id?: string
+          status_code?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "endpoints_scan_id_fkey"
+            columns: ["scan_id"]
+            isOneToOne: false
+            referencedRelation: "scans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      osint_findings: {
+        Row: {
+          created_at: string
+          data: Json | null
+          description: string
+          finding_type: string
+          id: string
+          scan_id: string
+          severity: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          description: string
+          finding_type: string
+          id?: string
+          scan_id: string
+          severity: string
+          source: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          description?: string
+          finding_type?: string
+          id?: string
+          scan_id?: string
+          severity?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "osint_findings_scan_id_fkey"
+            columns: ["scan_id"]
+            isOneToOne: false
+            referencedRelation: "scans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scans: {
         Row: {
           created_at: string
