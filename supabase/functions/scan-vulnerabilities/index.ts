@@ -185,25 +185,24 @@ serve(async (req) => {
     };
 
     // Perform vulnerability checks
+    let response;
     try {
-      let response;
+      response = await fetchWithTimeout(httpsUrl, {
+        method: 'GET',
+        redirect: 'manual',
+      }, 10000);
+    } catch (fetchError) {
+      // If HTTPS fails, try HTTP
+      console.log('HTTPS fetch failed, trying HTTP:', fetchError);
       try {
-        response = await fetchWithTimeout(httpsUrl, {
+        response = await fetchWithTimeout(httpUrl, {
           method: 'GET',
           redirect: 'manual',
         }, 10000);
-      } catch (fetchError) {
-        // If HTTPS fails, try HTTP
-        console.log('HTTPS fetch failed, trying HTTP:', fetchError);
-        try {
-          response = await fetchWithTimeout(httpUrl, {
-            method: 'GET',
-            redirect: 'manual',
-          }, 10000);
-        } catch (httpError) {
-          throw new Error('Unable to connect to domain. The site may be blocking automated requests or is unreachable. Try popular domains like google.com, github.com, or cloudflare.com');
-        }
+      } catch (httpError) {
+        throw new Error('Unable to connect to domain. The site may be blocking automated requests or is unreachable. Try popular domains like google.com, github.com, or cloudflare.com');
       }
+    }
 
       const headers = response.headers;
 
@@ -1020,85 +1019,77 @@ serve(async (req) => {
       console.log('Generating attack paths...');
       attackPaths = generateAttackPaths(vulnerabilities);
 
-    } catch (error) {
-      console.error('Scan error:', error);
-      throw new Error(`Failed to scan domain`);
-    }
-
     // Enhanced False Positive Reduction
     console.log('Reducing false positives...');
-    const reduceFalsePositives = (vulns: VulnerabilityCheck[]) => {
-      return vulns.map(v => {
-        let confidence = v.confidence || 60; // Default confidence - start lower
-        
-        // HIGH CONFIDENCE (90-100): Direct evidence of vulnerability
-        if (v.found && v.severity === 'critical') {
-          // SQL injection with actual error messages detected
-          if (v.title.includes('SQL Injection') && v.description.includes('detected')) {
-            confidence = 95;
-          }
-          // XSS with actual reflection detected
-          else if (v.title.includes('XSS') && v.description.includes('detected')) {
-            confidence = 95;
-          }
-          // Exposed sensitive files actually found
-          else if (v.description.includes('exposed') || v.description.includes('accessible')) {
-            confidence = 90;
-          }
-          else {
-            confidence = 85;
-          }
+    const filteredVulnerabilities = vulnerabilities.map(v => {
+      let confidence = v.confidence || 60; // Default confidence - start lower
+      
+      // HIGH CONFIDENCE (90-100): Direct evidence of vulnerability
+      if (v.found && v.severity === 'critical') {
+        // SQL injection with actual error messages detected
+        if (v.title.includes('SQL Injection') && v.description.includes('detected')) {
+          confidence = 95;
         }
-        
-        // MEDIUM-HIGH CONFIDENCE (70-89): Strong indicators but not direct proof
-        if (v.found && v.severity === 'high') {
-          if (v.description.includes('detected') || v.description.includes('found')) {
-            confidence = 80;
-          } else if (v.description.includes('missing') || v.description.includes('not set')) {
-            confidence = 75; // Missing headers are confirmed but impact varies
-          } else {
-            confidence = 70;
-          }
+        // XSS with actual reflection detected
+        else if (v.title.includes('XSS') && v.description.includes('detected')) {
+          confidence = 95;
         }
-        
-        // MEDIUM CONFIDENCE (55-69): Observable issues with moderate impact
-        if (v.found && v.severity === 'medium') {
-          if (v.description.includes('detected') || v.description.includes('found')) {
-            confidence = 65;
-          } else {
-            confidence = 60;
-          }
+        // Exposed sensitive files actually found
+        else if (v.description.includes('exposed') || v.description.includes('accessible')) {
+          confidence = 90;
         }
-        
-        // LOW CONFIDENCE (40-54): Minor issues or speculative findings
-        if (v.found && (v.severity === 'low' || v.severity === 'info')) {
-          confidence = 50;
+        else {
+          confidence = 85;
         }
-        
-        // REDUCE confidence for speculative language
-        if (v.description.includes('may') || v.description.includes('might') || 
-            v.description.includes('possible') || v.description.includes('could')) {
-          confidence = Math.max(confidence - 15, 35);
+      }
+      
+      // MEDIUM-HIGH CONFIDENCE (70-89): Strong indicators but not direct proof
+      if (v.found && v.severity === 'high') {
+        if (v.description.includes('detected') || v.description.includes('found')) {
+          confidence = 80;
+        } else if (v.description.includes('missing') || v.description.includes('not set')) {
+          confidence = 75; // Missing headers are confirmed but impact varies
+        } else {
+          confidence = 70;
         }
-        
-        // INCREASE confidence for definitive evidence
-        if (v.description.includes('exposed') || v.description.includes('vulnerable') ||
-            v.description.includes('error messages detected')) {
-          confidence = Math.min(confidence + 10, 100);
+      }
+      
+      // MEDIUM CONFIDENCE (55-69): Observable issues with moderate impact
+      if (v.found && v.severity === 'medium') {
+        if (v.description.includes('detected') || v.description.includes('found')) {
+          confidence = 65;
+        } else {
+          confidence = 60;
         }
-        
-        // Info findings that aren't vulnerabilities
-        if (!v.found && v.severity === 'info') {
-          confidence = 100; // High confidence it's NOT a vulnerability
-        }
+      }
+      
+      // LOW CONFIDENCE (40-54): Minor issues or speculative findings
+      if (v.found && (v.severity === 'low' || v.severity === 'info')) {
+        confidence = 50;
+      }
+      
+      // REDUCE confidence for speculative language
+      if (v.description.includes('may') || v.description.includes('might') || 
+          v.description.includes('possible') || v.description.includes('could')) {
+        confidence = Math.max(confidence - 15, 35);
+      }
+      
+      // INCREASE confidence for definitive evidence
+      if (v.description.includes('exposed') || v.description.includes('vulnerable') ||
+          v.description.includes('error messages detected')) {
+        confidence = Math.min(confidence + 10, 100);
+      }
+      
+      // Info findings that aren't vulnerabilities
+      if (!v.found && v.severity === 'info') {
+        confidence = 100; // High confidence it's NOT a vulnerability
+      }
 
-        return { ...v, confidence };
-      }).filter(v => {
-        // Keep findings with confidence >= 40, or info findings that passed
-        return v.confidence >= 40 || (!v.found && v.severity === 'info');
-      });
-    };
-    const filteredVulnerabilities = reduceFalsePositives(vulnerabilities);
+      return { ...v, confidence };
+    }).filter(v => {
+      // Keep findings with confidence >= 40, or info findings that passed
+      return v.confidence >= 40 || (!v.found && v.severity === 'info');
+    });
     
     // Enhanced Security Score Calculation
     const totalVulnerabilities = filteredVulnerabilities.length;
