@@ -71,26 +71,99 @@ serve(async (req) => {
     let osintFindings: OSINTFinding[] = [];
     let attackPaths: any[] = [];
 
-    // Common wordlists for endpoint discovery
+    // Enhanced Common wordlists for endpoint discovery
     const commonEndpoints = [
-      '/api', '/api/v1', '/api/v2', '/api/docs', '/api/swagger',
-      '/admin', '/administrator', '/wp-admin', '/phpmyadmin',
-      '/config', '/env', '/.env', '/.git', '/.git/config',
-      '/backup', '/backups', '/db', '/database',
-      '/test', '/dev', '/staging', '/debug',
-      '/uploads', '/files', '/images', '/assets',
-      '/login', '/signin', '/logout', '/register',
-      '/users', '/user', '/profile', '/account',
-      '/health', '/status', '/metrics', '/info',
-      '/graphql', '/ws', '/websocket', '/socket.io'
+      // API endpoints
+      '/api', '/api/v1', '/api/v2', '/api/v3', '/api/docs', '/api/swagger', '/api/auth',
+      '/api/login', '/api/users', '/api/user', '/api/admin', '/api/data', '/api/config',
+      '/api/token', '/api/tokens', '/api/oauth', '/api/refresh', '/api/logout',
+      '/api/status', '/api/health', '/api/info', '/api/version', '/api/ping',
+      '/api/graphql', '/api/rest', '/api/query', '/api/search', '/api/upload',
+      
+      // Admin panels
+      '/admin', '/administrator', '/admin/login', '/admin/dashboard', '/admin/config',
+      '/wp-admin', '/wp-login.php', '/wp-content', '/wp-includes', '/wp-json',
+      '/phpmyadmin', '/pma', '/mysql', '/dbadmin', '/adminer',
+      '/dashboard', '/control-panel', '/cpanel', '/manager', '/backend',
+      '/admin-panel', '/adminpanel', '/admin_area', '/admin-login',
+      
+      // Configuration and sensitive files
+      '/config', '/configuration', '/settings', '/env', '/.env', '/.env.local',
+      '/.env.production', '/.env.development', '/config.php', '/config.json',
+      '/.git', '/.git/config', '/.git/HEAD', '/.gitignore', '/.gitmodules',
+      '/.svn', '/.hg', '/.bzr', '/CVS',
+      '/.htaccess', '/.htpasswd', '/web.config', '/.aws/credentials',
+      '/composer.json', '/package.json', '/package-lock.json', '/yarn.lock',
+      
+      // Backup and database files
+      '/backup', '/backups', '/backup.sql', '/backup.zip', '/backup.tar.gz',
+      '/db', '/database', '/database.sql', '/dump.sql', '/mysql.sql',
+      '/db_backup', '/sql', '/old', '/old_site', '/site_backup',
+      
+      // Development and testing
+      '/test', '/tests', '/testing', '/dev', '/development', '/staging',
+      '/debug', '/trace', '/console', '/playground', '/sandbox',
+      '/beta', '/demo', '/tmp', '/temp', '/cache',
+      
+      // File storage and uploads
+      '/uploads', '/upload', '/files', '/file', '/images', '/img', '/assets',
+      '/media', '/content', '/static', '/public', '/downloads', '/download',
+      '/attachments', '/documents', '/storage', '/data',
+      
+      // Authentication endpoints
+      '/login', '/signin', '/sign-in', '/logout', '/signout', '/sign-out',
+      '/register', '/signup', '/sign-up', '/auth', '/authenticate',
+      '/oauth', '/oauth2', '/sso', '/saml', '/password-reset',
+      '/forgot-password', '/reset-password', '/change-password',
+      
+      // User management
+      '/users', '/user', '/profile', '/account', '/accounts', '/members',
+      '/customer', '/customers', '/client', '/clients', '/admin/users',
+      
+      // Monitoring and status
+      '/health', '/healthz', '/health-check', '/status', '/ping', '/metrics',
+      '/info', '/version', '/stats', '/statistics', '/monitor', '/monitoring',
+      '/actuator', '/actuator/health', '/actuator/info', '/actuator/metrics',
+      
+      // API documentation
+      '/docs', '/documentation', '/doc', '/swagger', '/swagger-ui', '/swagger.json',
+      '/openapi', '/openapi.json', '/redoc', '/api-docs', '/apidocs',
+      '/graphql', '/graphiql', '/playground',
+      
+      // WebSocket and real-time
+      '/ws', '/wss', '/websocket', '/socket', '/socket.io', '/sockjs',
+      '/realtime', '/stream', '/events', '/sse',
+      
+      // REST endpoints
+      '/rest', '/rest/v1', '/rest/v2', '/restapi', '/rest-api',
+      
+      // Cloud and storage
+      '/s3', '/bucket', '/cdn', '/cloud', '/azure', '/gcs',
+      
+      // CMS specific
+      '/wp-admin', '/wordpress', '/joomla', '/drupal', '/magento',
+      '/administrator/index.php', '/admin.php', '/admin/index.php',
+      
+      // Common directories
+      '/includes', '/inc', '/lib', '/library', '/vendor', '/node_modules',
+      '/src', '/app', '/application', '/core', '/system',
+      
+      // Error pages and logs
+      '/error', '/errors', '/error.log', '/error_log', '/logs', '/log',
+      '/debug.log', '/access.log', '/server.log', '/app.log',
+      
+      // Security files
+      '/robots.txt', '/sitemap.xml', '/security.txt', '/.well-known/security.txt',
+      '/crossdomain.xml', '/clientaccesspolicy.xml'
     ];
 
-    // API-specific endpoints
+    // API-specific endpoints for ML-based discovery
     const apiEndpoints = [
-      '/v1/users', '/v1/auth', '/v1/data', '/v1/query',
-      '/v2/users', '/v2/auth', '/v2/data',
-      '/rest', '/rest/v1', '/rest/v2',
-      '/graphql/v1', '/graphql/v2'
+      '/v1/users', '/v1/auth', '/v1/data', '/v1/query', '/v1/login', '/v1/token',
+      '/v2/users', '/v2/auth', '/v2/data', '/v2/login', '/v2/token',
+      '/v3/users', '/v3/auth', '/v3/data',
+      '/rest', '/rest/v1', '/rest/v2', '/rest/api',
+      '/graphql/v1', '/graphql/v2', '/graphql/api'
     ];
 
     // Helper function to fetch with timeout
@@ -688,32 +761,62 @@ serve(async (req) => {
       const discoverEndpoints = async (baseUrl: string) => {
         const endpoints: EndpointDiscovery[] = [];
         
-        // Wordlist-based discovery
+        // Wordlist-based discovery with proper status code handling
         for (const endpoint of commonEndpoints) {
           try {
             const startTime = Date.now();
             const endpointUrl = `${baseUrl}${endpoint}`;
-            const response = await fetchWithTimeout(endpointUrl, { method: 'GET' }, 3000);
+            const response = await fetchWithTimeout(endpointUrl, { 
+              method: 'GET',
+              redirect: 'manual' // Don't follow redirects automatically
+            }, 3000);
             const responseTime = Date.now() - startTime;
             
-            if (response.status !== 404) {
+            // Map status codes properly
+            let actualStatus = response.status;
+            
+            // Handle redirects (3xx)
+            if (response.status >= 300 && response.status < 400) {
+              const location = response.headers.get('location');
+              if (location) {
+                // Check if redirect is to different domain
+                try {
+                  const redirectUrl = new URL(location, baseUrl);
+                  const baseUrlObj = new URL(baseUrl);
+                  if (redirectUrl.hostname !== baseUrlObj.hostname) {
+                    actualStatus = 302; // External redirect
+                  } else {
+                    actualStatus = 301; // Internal redirect
+                  }
+                } catch {
+                  actualStatus = 302;
+                }
+              }
+            }
+            
+            // Only add endpoints that are found or have interesting status codes
+            // 200: OK, 201: Created, 204: No Content
+            // 301: Moved Permanently, 302: Found (redirect)
+            // 401: Unauthorized, 403: Forbidden (interesting - endpoint exists but blocked)
+            // 500: Server Error (endpoint exists but has issues)
+            if (actualStatus !== 404 && actualStatus !== 0) {
               endpoints.push({
                 path: endpoint,
                 method: 'GET',
-                status_code: response.status,
+                status_code: actualStatus,
                 discovered_by: 'wordlist',
                 response_time: responseTime,
                 content_type: response.headers.get('content-type') || 'unknown'
               });
             }
           } catch (e) {
-            // Endpoint doesn't exist or timed out
+            // Endpoint doesn't exist or network error - skip it
           }
         }
 
         // ML-based pattern detection (check for common API patterns)
-        const apiPatterns = ['/api/v{version}/', '/rest/v{version}/', '/{resource}/api/'];
-        const resources = ['users', 'posts', 'products', 'orders', 'auth'];
+        const apiPatterns = ['/api/v{version}/', '/rest/v{version}/', '/{resource}/api/', '/api/{resource}'];
+        const resources = ['users', 'posts', 'products', 'orders', 'auth', 'customers', 'data', 'items', 'accounts'];
         const versions = ['1', '2', '3'];
 
         for (const pattern of apiPatterns) {
@@ -722,21 +825,39 @@ serve(async (req) => {
               try {
                 let endpoint = pattern.replace('{version}', version);
                 if (pattern.includes('{resource}')) {
-                  endpoint = pattern.replace('{resource}', resource);
+                  endpoint = endpoint.replace('{resource}', resource);
                 } else {
                   endpoint = endpoint + resource;
                 }
 
                 const startTime = Date.now();
                 const endpointUrl = `${baseUrl}${endpoint}`;
-                const response = await fetchWithTimeout(endpointUrl, { method: 'GET' }, 2000);
+                const response = await fetchWithTimeout(endpointUrl, { 
+                  method: 'GET',
+                  redirect: 'manual'
+                }, 2000);
                 const responseTime = Date.now() - startTime;
                 
-                if (response.status !== 404) {
+                // Same status code handling as wordlist discovery
+                let actualStatus = response.status;
+                if (response.status >= 300 && response.status < 400) {
+                  const location = response.headers.get('location');
+                  if (location) {
+                    try {
+                      const redirectUrl = new URL(location, baseUrl);
+                      const baseUrlObj = new URL(baseUrl);
+                      actualStatus = redirectUrl.hostname !== baseUrlObj.hostname ? 302 : 301;
+                    } catch {
+                      actualStatus = 302;
+                    }
+                  }
+                }
+                
+                if (actualStatus !== 404 && actualStatus !== 0) {
                   endpoints.push({
                     path: endpoint,
                     method: 'GET',
-                    status_code: response.status,
+                    status_code: actualStatus,
                     discovered_by: 'ml',
                     response_time: responseTime,
                     content_type: response.headers.get('content-type') || 'unknown'
@@ -749,25 +870,24 @@ serve(async (req) => {
           }
         }
 
-        // API Security Check - test discovered API endpoints
-        for (const ep of endpoints.filter(e => e.path.includes('api'))) {
-          // Check for missing authentication
-          if (ep.status_code === 200) {
-            vulnerabilities.push({
-              category: 'API Security',
-              severity: 'high',
-              title: `Unauthenticated API Access: ${ep.path}`,
-              description: `API endpoint ${ep.path} is accessible without authentication`,
-              recommendation: 'Implement proper authentication (OAuth 2.0, JWT) for all API endpoints',
-              found: true,
-              confidence: 85,
-              owasp_category: 'A01:2021 - Broken Access Control',
-              how_to_fix: 'Implement API key validation, JWT tokens, or OAuth 2.0. Ensure all API endpoints require authentication. Use rate limiting to prevent abuse. Implement proper authorization checks.'
-            });
-          }
+        // API Security Check - test discovered API endpoints (only for confirmed accessible endpoints)
+        for (const ep of endpoints.filter(e => e.path.includes('api') && e.status_code === 200)) {
+          // Only flag as vulnerability if it's truly accessible without auth
+          vulnerabilities.push({
+            category: 'API Security',
+            severity: 'high',
+            title: `Potentially Unauthenticated API Access: ${ep.path}`,
+            description: `API endpoint ${ep.path} responded with 200 OK without authentication headers`,
+            recommendation: 'Verify if this endpoint requires authentication. Implement proper authentication (OAuth 2.0, JWT) if needed.',
+            found: true,
+            confidence: 75, // Lower confidence since we don't know if auth is truly needed
+            owasp_category: 'A01:2021 - Broken Access Control',
+            how_to_fix: 'Implement API key validation, JWT tokens, or OAuth 2.0. Ensure all sensitive API endpoints require authentication. Use rate limiting to prevent abuse. Implement proper authorization checks.'
+          });
+        }
 
-          // Check for verbose error messages
-          if (ep.status_code >= 500) {
+        // Check for server errors in discovered endpoints
+        for (const ep of endpoints.filter(e => e.status_code >= 500)) {
             vulnerabilities.push({
               category: 'API Security',
               severity: 'medium',
@@ -783,35 +903,6 @@ serve(async (req) => {
         }
 
         return endpoints;
-      };
-
-      // False-Positive Reduction using confidence scoring
-      const reduceFalsePositives = (vulns: VulnerabilityCheck[]) => {
-        return vulns.map(v => {
-          let confidence = v.confidence || 100;
-
-          // Reduce confidence for info-level findings
-          if (v.severity === 'info' && !v.found) {
-            confidence = Math.max(confidence - 30, 40);
-          }
-
-          // Increase confidence for critical findings with evidence
-          if (v.severity === 'critical' && v.found) {
-            confidence = Math.min(confidence + 15, 100);
-          }
-
-          // Reduce confidence for speculative checks
-          if (v.description.includes('may') || v.description.includes('possible')) {
-            confidence = Math.max(confidence - 20, 50);
-          }
-
-          // Increase confidence for direct evidence
-          if (v.description.includes('detected') || v.description.includes('found') || v.description.includes('exposed')) {
-            confidence = Math.min(confidence + 10, 100);
-          }
-
-          return { ...v, confidence };
-        }).filter(v => v.confidence >= 40); // Filter out low-confidence findings
       };
 
       // Generate Attack Paths
@@ -931,45 +1022,138 @@ serve(async (req) => {
 
     } catch (error) {
       console.error('Scan error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to scan domain: ${errorMessage}`);
+      throw new Error(`Failed to scan domain`);
     }
 
-    // Apply false-positive reduction
+    // Enhanced False Positive Reduction
     console.log('Reducing false positives...');
     const reduceFalsePositives = (vulns: VulnerabilityCheck[]) => {
       return vulns.map(v => {
-        let confidence = v.confidence || 100;
-        if (v.severity === 'info' && !v.found) confidence = Math.max(confidence - 30, 40);
-        if (v.severity === 'critical' && v.found) confidence = Math.min(confidence + 15, 100);
-        if (v.description.includes('may') || v.description.includes('possible')) confidence = Math.max(confidence - 20, 50);
-        if (v.description.includes('detected') || v.description.includes('found') || v.description.includes('exposed')) confidence = Math.min(confidence + 10, 100);
+        let confidence = v.confidence || 60; // Default confidence - start lower
+        
+        // HIGH CONFIDENCE (90-100): Direct evidence of vulnerability
+        if (v.found && v.severity === 'critical') {
+          // SQL injection with actual error messages detected
+          if (v.title.includes('SQL Injection') && v.description.includes('detected')) {
+            confidence = 95;
+          }
+          // XSS with actual reflection detected
+          else if (v.title.includes('XSS') && v.description.includes('detected')) {
+            confidence = 95;
+          }
+          // Exposed sensitive files actually found
+          else if (v.description.includes('exposed') || v.description.includes('accessible')) {
+            confidence = 90;
+          }
+          else {
+            confidence = 85;
+          }
+        }
+        
+        // MEDIUM-HIGH CONFIDENCE (70-89): Strong indicators but not direct proof
+        if (v.found && v.severity === 'high') {
+          if (v.description.includes('detected') || v.description.includes('found')) {
+            confidence = 80;
+          } else if (v.description.includes('missing') || v.description.includes('not set')) {
+            confidence = 75; // Missing headers are confirmed but impact varies
+          } else {
+            confidence = 70;
+          }
+        }
+        
+        // MEDIUM CONFIDENCE (55-69): Observable issues with moderate impact
+        if (v.found && v.severity === 'medium') {
+          if (v.description.includes('detected') || v.description.includes('found')) {
+            confidence = 65;
+          } else {
+            confidence = 60;
+          }
+        }
+        
+        // LOW CONFIDENCE (40-54): Minor issues or speculative findings
+        if (v.found && (v.severity === 'low' || v.severity === 'info')) {
+          confidence = 50;
+        }
+        
+        // REDUCE confidence for speculative language
+        if (v.description.includes('may') || v.description.includes('might') || 
+            v.description.includes('possible') || v.description.includes('could')) {
+          confidence = Math.max(confidence - 15, 35);
+        }
+        
+        // INCREASE confidence for definitive evidence
+        if (v.description.includes('exposed') || v.description.includes('vulnerable') ||
+            v.description.includes('error messages detected')) {
+          confidence = Math.min(confidence + 10, 100);
+        }
+        
+        // Info findings that aren't vulnerabilities
+        if (!v.found && v.severity === 'info') {
+          confidence = 100; // High confidence it's NOT a vulnerability
+        }
+
         return { ...v, confidence };
-      }).filter(v => v.confidence >= 40);
+      }).filter(v => {
+        // Keep findings with confidence >= 40, or info findings that passed
+        return v.confidence >= 40 || (!v.found && v.severity === 'info');
+      });
     };
     const filteredVulnerabilities = reduceFalsePositives(vulnerabilities);
     
-    // Calculate security score
+    // Enhanced Security Score Calculation
     const totalVulnerabilities = filteredVulnerabilities.length;
     const foundVulnerabilities = filteredVulnerabilities.filter(v => v.found).length;
-    const criticalCount = filteredVulnerabilities.filter(v => v.found && v.severity === 'critical').length;
-    const highCount = filteredVulnerabilities.filter(v => v.found && v.severity === 'high').length;
-    const mediumCount = filteredVulnerabilities.filter(v => v.found && v.severity === 'medium').length;
     
-    // Scoring algorithm: Start with 100, deduct points based on severity
+    // Categorize vulnerabilities by severity and confidence
+    const criticalVulns = filteredVulnerabilities.filter(v => v.found && v.severity === 'critical');
+    const highVulns = filteredVulnerabilities.filter(v => v.found && v.severity === 'high');
+    const mediumVulns = filteredVulnerabilities.filter(v => v.found && v.severity === 'medium');
+    const lowVulns = filteredVulnerabilities.filter(v => v.found && v.severity === 'low');
+    
+    // Improved scoring algorithm: More balanced to avoid very low scores
     let securityScore = 100;
-    securityScore -= criticalCount * 25; // Increased penalty for critical (SQL injection, etc.)
-    securityScore -= highCount * 12;
-    securityScore -= mediumCount * 6;
-    securityScore -= filteredVulnerabilities.filter(v => v.found && v.severity === 'low').length * 2;
     
-    // Deduct points for OSINT findings
+    // Critical vulnerabilities: Confirmed exploitable issues (15 points each, not 25)
+    for (const vuln of criticalVulns) {
+      const confidence = vuln.confidence || 70;
+      // Weight by confidence: 95% confidence = full penalty, 70% confidence = reduced penalty
+      const penalty = 15 * (confidence / 100);
+      securityScore -= penalty;
+    }
+    
+    // High severity: Significant issues (8 points each, not 12)
+    for (const vuln of highVulns) {
+      const confidence = vuln.confidence || 70;
+      const penalty = 8 * (confidence / 100);
+      securityScore -= penalty;
+    }
+    
+    // Medium severity: Notable concerns (4 points each, not 6)
+    for (const vuln of mediumVulns) {
+      const confidence = vuln.confidence || 60;
+      const penalty = 4 * (confidence / 100);
+      securityScore -= penalty;
+    }
+    
+    // Low severity: Minor issues (1.5 points each, not 2)
+    securityScore -= lowVulns.length * 1.5;
+    
+    // OSINT findings: Exposure risks (reduced penalties)
     const criticalOSINT = osintFindings.filter(o => o.severity === 'critical').length;
     const highOSINT = osintFindings.filter(o => o.severity === 'high').length;
-    securityScore -= criticalOSINT * 10;
-    securityScore -= highOSINT * 5;
+    const mediumOSINT = osintFindings.filter(o => o.severity === 'medium').length;
     
-    securityScore = Math.max(0, securityScore); // Don't go below 0
+    securityScore -= criticalOSINT * 8;  // Reduced from 10
+    securityScore -= highOSINT * 4;      // Reduced from 5
+    securityScore -= mediumOSINT * 2;    // Added medium OSINT
+    
+    // Bonus points for good security practices
+    const passedChecks = filteredVulnerabilities.filter(v => !v.found && v.severity !== 'info').length;
+    const bonusPoints = Math.min(passedChecks * 0.5, 15); // Up to 15 bonus points
+    securityScore += bonusPoints;
+    
+    // Ensure score stays between 0-100
+    securityScore = Math.max(0, Math.min(100, Math.round(securityScore)));
 
     console.log(`Scan complete. Score: ${securityScore}, Vulnerabilities found: ${foundVulnerabilities}, OSINT findings: ${osintFindings.length}, Endpoints: ${discoveredEndpoints.length}`);
 
