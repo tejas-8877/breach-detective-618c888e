@@ -204,16 +204,16 @@ serve(async (req) => {
       }
     }
 
-      const headers = response.headers;
+    const headers = response.headers;
 
-      // 1. SSL/TLS Check (OWASP A02:2021 - Cryptographic Failures)
-      vulnerabilities.push({
-        category: 'Transport Security',
-        severity: 'critical',
-        title: 'SSL/TLS Certificate',
-        description: 'Website uses HTTPS encryption',
-        recommendation: 'Ensure SSL certificate is valid and up to date. Use TLS 1.3 or TLS 1.2 at minimum.',
-        found: !httpsUrl.startsWith('https'),
+    // 1. SSL/TLS Check (OWASP A02:2021 - Cryptographic Failures)
+    vulnerabilities.push({
+      category: 'Transport Security',
+      severity: 'critical',
+      title: 'SSL/TLS Certificate',
+      description: 'Website uses HTTPS encryption',
+      recommendation: 'Ensure SSL certificate is valid and up to date. Use TLS 1.3 or TLS 1.2 at minimum.',
+      found: !httpsUrl.startsWith('https'),
         owasp_category: 'A02:2021 - Cryptographic Failures',
         how_to_fix: 'Install a valid SSL/TLS certificate from a trusted Certificate Authority. Configure your web server (Apache, Nginx, IIS) to use HTTPS. Redirect all HTTP traffic to HTTPS. Use tools like Let\'s Encrypt for free certificates.',
       });
